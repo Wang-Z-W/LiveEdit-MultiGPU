@@ -119,10 +119,11 @@ class VLLMEditorEvaluation():
         for split_rd, split_ed in zip(tqdm(result_data, 'Evaluating'), eval_data):
             cur_session += 1
             split_res = []
+            # prepare and locality
             for rd, ed in zip(tqdm(split_rd, 'Preparing', leave = False), split_ed):
                 rd['reliability'] = rd.pop('requests') 
                 for r in rd['reliability']:
-                    r['target'] = r.pop('target_new') 
+                    r['target'] = r.pop('target_new')
                 for loc_name in ed['locality'].keys(): # predict before edit for locality data
                     for rdl, edl in zip(rd['locality'][loc_name], ed['locality'][loc_name]):
                         (input_embeds, vt_range), label_ids, label_masks = editor.vllm.prompts_imgs_target_to_xym(
@@ -131,19 +132,21 @@ class VLLMEditorEvaluation():
                         before_edit_ids = torch.softmax(logits, -1).argmax(-1)[:, -label_ids.shape[1]:] # [1, l2]
                         rdl['predict_before_edit'] = tokenizer.decode(before_edit_ids[label_masks.to(bool)])
                         edl['before_edit_ids'] = before_edit_ids
+            # edit
             for rd, ed in zip(tqdm(split_rd, 'Editing', leave = False), split_ed): # edit 
                 for rdr, edr in zip(rd['reliability'], ed['requests']):
                     start_t = time()
                     editor.edit_one_piece(edr)
                     rdr['edit_time'] = time() - start_t
-            for rd, ed in zip(tqdm(split_rd, 'Testing', leave = False), split_ed): # compute scores 
-                rd = self.__get_results_after_edit__(editor.vllm, ed, rd)
-                split_res.append(rd)
             # save ckpt
             if cfg.save_editor_checkpoint:
                 checkpoint_save_path = os.path.join(save_dir, f"checkpoint_session_{cur_session}.pt")
                 editor.save_ckpt_eval(cfg, checkpoint_save_path)
                 print(f'Editor {cfg.editor_name} checkpoint saved to: {checkpoint_save_path}')
+            # test
+            for rd, ed in zip(tqdm(split_rd, 'Testing', leave = False), split_ed): # compute scores 
+                rd = self.__get_results_after_edit__(editor.vllm, ed, rd)
+                split_res.append(rd)
             editor.restore_to_original_model()
             results.append(split_res)
         # save results
