@@ -281,7 +281,7 @@ class VLLMBaseEditorWithTraining(VLLMBaseEditor):
 
     def load_ckpt(self, ckpt_path, restrict = True, load_opt = True):
         '''Load checkpoint.'''
-        ckpt = torch.load(ckpt_path, 'cpu')
+        ckpt = torch.load(ckpt_path, 'cpu', weights_only=False)
         train_modules = self.get_modules_for_training()
         for k in train_modules.keys():
             train_modules[k].load_state_dict(ckpt['train_modules'][k], restrict)

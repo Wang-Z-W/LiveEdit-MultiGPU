@@ -82,9 +82,13 @@ def infer_single(editor):
     vllm_out = infer(editor, text, image)
     import pdb; pdb.set_trace()
     print(vllm_out)
+    
+def set_device(cfg):
+    cfg.device = [f"cuda:{d}" for d in cfg.device.split(',')]
 
 if __name__ == "__main__":
     cfg = get_cfg()
+    set_device(cfg)
     cfg.editor_name = cfg.editor_name.lower()
     cfg.model_name = get_full_model_name(cfg.model_name)
     cfg.data_name = cfg.data_name.upper() if cfg.data_name is not None else None
