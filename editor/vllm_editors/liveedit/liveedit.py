@@ -120,7 +120,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
                 query_reps = reps[:, self.now_infer_vt_range[1]:self.now_infer_query_pos_end] 
                 self.now_infer_inpt_embd_shape = self.now_infer_vt_range = self.now_infer_query_pos_end = None
                 moe_cs, moe_rs, fuse_coe = self.retrieve_moes(vision_reps, query_reps)
-                edit_residual = self.get_edit_residual(reps, moe_cs, moe_rs, fuse_coe)
+                edit_residual = self.get_edit_residual(reps, moe_cs.to('cpu'), moe_rs.to('cpu'), fuse_coe.to('cpu'))
                 output = apply_edit_residual(output, edit_residual.to(output[0].device))
             return output
         edit_layer = find_module(self.vllm.model, self.edit_layer_path)
@@ -183,7 +183,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             moe_in_rs: [m, lora_rank, ffn_out]; moe_out_cs: [m, lora_rank, ffn_out]; 
             moe_out_rs: [m, lora_rank, ffn_in]; fuse_coe: [1, m]'''
         assert len(inpt_reps) == len(fuse_coe) == 1
-        x = self.instant_reps_norm(inpt_reps)[0] # [1, l, hidden_size] -> [l, hidden_size]
+        x = self.instant_reps_norm(inpt_reps)[0].to('cpu') # [1, l, hidden_size] -> [l, hidden_size]
         # x = torch.einsum('ld,mrd,mrD,m->lD', x, moe_cs, moe_rs, fuse_coe[0])
         x = torch.relu(torch.einsum('ld,mrd->lmr', x, moe_cs))
         x = torch.einsum('lmr,mrd,m->ld', x, moe_rs, fuse_coe[0])
