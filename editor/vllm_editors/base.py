@@ -22,7 +22,7 @@ class VLLMBaseEditor(ABC):
         if not isinstance(vllm, BaseVLLMForEdit): raise
         self.vllm = vllm
         self.vllm.set_device(device)
-        self.device = device if device != 'auto' else 'cuda:0'
+        self.device = device
         assert self.if_model_decoder_only() # temporary only support decoder-only llm
 
     def if_model_decoder_only(self)->bool:

@@ -1,14 +1,14 @@
 cd ..
-python test_vllm_edit.py \
-    -dvc "2" \
+nohup python -u test_vllm_edit.py \
+    -dvc "7" \
     -en "ft_vl" \
     -mn "llava-v1.5-7b" \
     -dn "WaterBird" \
-    -dfn "edit_annotations_truelabel_balanced_question2" \
+    -dfn "edit_annotations_truelabel" \
     -spt "train" \
     -dsn 999999 \
     -sen 999999 \
-    -saveckpt
+    -saveckpt > OUT_ft_llava_wb.log 2>&1 &
 
 # Required args
 # -dvc: device

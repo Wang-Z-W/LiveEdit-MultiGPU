@@ -1,6 +1,6 @@
 cd ..
 python -m pdb test_vllm_edit.py \
-    -dvc "4" \
+    -dvc "4,5" \
     -en "liveedit" \
     -mn "llava-v1.5-7b" \
     -dn "WaterBird" \

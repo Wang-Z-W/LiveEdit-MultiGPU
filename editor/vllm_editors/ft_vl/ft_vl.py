@@ -24,9 +24,8 @@ class FTvlConfig(BaseConfig):
 
 class FTvl(VLLMBaseEditor):
 
-    def __init__(self, vllm: BaseVLLMForEdit, config:FTvlConfig, device='cuda:0',
+    def __init__(self, vllm: BaseVLLMForEdit, config:FTvlConfig, device:List[str] = ['cuda:0'],
                  verbose = False):
-        device = device[0] if len(device) == 1 else device
         super().__init__(vllm, device)
         self.cfg = config
         self.verbose = verbose
@@ -46,7 +45,7 @@ class FTvl(VLLMBaseEditor):
     def restore_to_original_model(self):
         self.vllm.model.load_state_dict(self.original_w, strict = False)
         
-    def save_ckpt(self, eval_cfg, save_path:str):
+    def save_ckpt_eval(self, eval_cfg, save_path:str):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         editor_state = {
             'vllm_model_state_dict': self.vllm.model.state_dict(),
