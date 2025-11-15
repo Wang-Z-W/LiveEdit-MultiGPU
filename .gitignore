@@ -1,0 +1,34 @@
+# Python 编译缓存
+__pycache__/
+*.py[cod]
+*.pyo
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# 日志与中间输出
+*.log
+
+# 训练/评估生成物（通常不入库）
+records/
+eval_results/
+
+# 大型数据集（保留代码与标注脚本，不跟踪原始图片等大文件）
+data/SpuMNIST/spumnist_base/images_train/
+data/SpuMNIST/spumnist_base/images_test/
+data/easy-edit-mm/images/
+data/VLKEB/mmkb_images/
+data/WaterBird/rephrase_images/
+data/WaterBird/waterbird_complete95_forest2water2_improved/
+data/CUB_200_2011/
+
+# 权重与检查点
+*.pt
+
+# 操作系统/编辑器
+.DS_Store
+
+# 如果不想提交 VSCode 工作区设置，取消注释下一行
+.vscode/
