@@ -1,3 +1,7 @@
+# LiveEdit-MultiGPU
+This is a reimplementation of LiveEdit (CVPR 2025) for multi-GPU running.
+The following is the original setup of [LiveEdit](https://github.com/qizhou000/LiveEdit).
+
 # LiveEdit
 
 Source code for CVPR paper [Lifelong Knowledge Editing for Vision Language Models with Low-Rank Mixture-of-Experts](https://openaccess.thecvf.com/content/CVPR2025/html/Chen_Lifelong_Knowledge_Editing_for_Vision_Language_Models_with_Low-Rank_Mixture-of-Experts_CVPR_2025_paper.html)
