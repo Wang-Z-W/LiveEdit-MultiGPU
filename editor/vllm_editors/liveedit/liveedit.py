@@ -213,6 +213,46 @@ class LiveEdit(VLLMBaseEditorWithTraining):
         self.moe_cs_pool = torch.zeros([0, self.cfg.retrieval_editor.lora_rank, self.cfg.llm_mid_dim], device=self.device[-1]) # lora 1 column weights pool
         self.moe_rs_pool = torch.zeros([0, self.cfg.retrieval_editor.lora_rank, self.cfg.llm_mid_dim], device=self.device[-1]) # lora 1 row weights pool
 
+    def save_ckpt_eval(self, eval_cfg, save_path):
+        train_modules = self.get_modules_for_training()
+        ckpt = {
+            'cfg': eval_cfg,
+            'i': None,
+            'epoch': None,
+            'loss': None,
+            'ema_loss': None,
+            'train_modules': {k:v.state_dict() for k, v in train_modules.items()},
+            'requests_pool': self.requests_pool,
+            'eqr_pool': self.eqr_pool,
+            'evr_pool': self.evr_pool,
+            'moe_cs_pool': self.moe_cs_pool,
+            'moe_rs_pool': self.moe_rs_pool,
+        }
+        torch.save(ckpt, save_path)
+        
+    def load_ckpt(self, ckpt_path, restrict = True, load_opt = True):
+        '''Load checkpoint.'''
+        ckpt = torch.load(ckpt_path, 'cpu', weights_only=False)
+        train_modules = self.get_modules_for_training()
+        for k in train_modules.keys():
+            train_modules[k].load_state_dict(ckpt['train_modules'][k], restrict)
+        if load_opt:
+            self.opt.load_state_dict(ckpt['opt'])
+            if self.lr_scheduler != None and ckpt['lr_scheduler'] != None:
+                self.lr_scheduler.load_state_dict(ckpt['lr_scheduler'])
+        if 'requests_pool' in ckpt.keys():
+            self.requests_pool = ckpt['requests_pool']
+        if 'eqr_pool' in ckpt.keys():
+            self.eqr_pool = ckpt['eqr_pool'].to(self.device[-1])
+        if 'evr_pool' in ckpt.keys():
+            self.evr_pool = ckpt['evr_pool'].to(self.device[-1])
+        if 'moe_cs_pool' in ckpt.keys():
+            self.moe_cs_pool = ckpt['moe_cs_pool'].to(self.device[-1])
+        if 'moe_rs_pool' in ckpt.keys():
+            self.moe_rs_pool = ckpt['moe_rs_pool'].to(self.device[-1])
+        print('Load %s checkpoint from %s.'%(self.name_of_editor_and_model()[0], ckpt_path))
+        return ckpt['i'], ckpt['epoch'], ckpt['loss'], ckpt['ema_loss']
+
     def edit_one_piece(self, request: Dict) -> None:
         """request = {'image': PILImage, 'prompt': str, 'target_new': str, ...} """
         self.is_editing = True
@@ -496,3 +536,5 @@ class LiveEdit(VLLMBaseEditorWithTraining):
     def other_train_init_begin(self):
         self.rng_data_proc = np.random.default_rng(self.random_seed)
         self.rng_train = np.random.default_rng(self.random_seed + 1)
+
+    

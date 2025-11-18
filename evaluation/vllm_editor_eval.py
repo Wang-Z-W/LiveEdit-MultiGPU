@@ -145,7 +145,8 @@ class VLLMEditorEvaluation():
                 print(f'Editor {cfg.editor_name} checkpoint saved to: {checkpoint_save_path}')
             # test
             for rd, ed in zip(tqdm(split_rd, 'Testing', leave = False), split_ed): # compute scores 
-                rd = self.__get_results_after_edit__(editor.vllm, ed, rd)
+                # rd = self.__get_results_after_edit__(editor.vllm, ed, rd)
+                rd = self.__get_results_after_edit_no_teacher_forcing__(editor.vllm, ed, rd)
                 split_res.append(rd)
             editor.restore_to_original_model()
             results.append(split_res)
@@ -174,7 +175,7 @@ class VLLMEditorEvaluation():
             logits = vllm.get_llm_outpt(input_embeds, vt_range).logits # [1,l1,d]
             pre_y = torch.softmax(logits, -1).argmax(-1) # [1, l1]
             pre_y = pre_y[:, -label_ids.shape[1]:] # [1, l2]
-            acc = ((pre_y == label_ids) * label_masks).sum()/label_masks.sum() 
+            acc = ((pre_y == label_ids) * label_masks).sum()/label_masks.sum()
             return float(acc), pre_y
         tokenizer = vllm.get_llm_tokenizer()
         # reliability
@@ -199,6 +200,47 @@ class VLLMEditorEvaluation():
                     edl['prompt'], edl['image'], edl['target'])
                 acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, edl['before_edit_ids'], label_masks)
                 rdl['predict_after_edit'] = tokenizer.decode(pre_y[label_masks.to(bool)])
+                rdl['acc'] = acc
+        return rd
+    
+    def __get_results_after_edit_no_teacher_forcing__(self, vllm:BaseVLLMForEdit, ed, rd):
+        def get_eval_input_target(prompt, image, target):
+            (x, vt_range), _, m = vllm.prompts_imgs_target_to_xym([prompt], [image], ' ')
+            x['query_triple'] = (prompt, image, target)
+            x['query_range'] = (0, x['inputs_embeds'].shape[1] - m.shape[1] + 1)
+            y = vllm.processor.tokenizer([target], return_tensors='pt', padding=True).input_ids[:,1:].to(vllm.device[-1])
+            return (x, vt_range), y
+        def accuracy_and_prediction(input_embeds, vt_range, label_ids):
+            # label_ids/label_masks: [1, l2]
+            assert len(label_ids) == 1
+            logits = vllm.get_llm_outpt(input_embeds, vt_range).logits # [1,l1,d]
+            pre_y = torch.softmax(logits, -1).argmax(-1) # [1, l1]
+            pre_y = pre_y[:, -1:] # [1, l2]
+            acc = (pre_y == label_ids).sum() / label_ids.shape[1]
+            return float(acc), pre_y
+        tokenizer = vllm.get_llm_tokenizer()
+        # reliability
+        for rdr, edr in zip(rd['reliability'], ed['requests']):
+            (input_embeds, vt_range), label_ids = get_eval_input_target(
+                    edr['prompt'], edr['image'], edr['target_new'])
+            acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
+            rdr['predict_after_edit'] = tokenizer.decode(pre_y[0])
+            rdr['acc'] = acc
+        # generality
+        for gen_name in ed['generality']:
+            for rdg, edg in zip(rd['generality'][gen_name], ed['generality'][gen_name]):
+                (input_embeds, vt_range), label_ids = get_eval_input_target(
+                    edg['prompt'], edg['image'], edg['target'])
+                acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
+                rdg['predict_after_edit'] = tokenizer.decode(pre_y[0])
+                rdg['acc'] = acc
+        # locality
+        for loc_name in ed['locality']:
+            for rdl, edl in zip(rd['locality'][loc_name], ed['locality'][loc_name]):
+                (input_embeds, vt_range), label_ids = get_eval_input_target(
+                    edl['prompt'], edl['image'], edl['target'])
+                acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
+                rdl['predict_after_edit'] = tokenizer.decode(pre_y[0])
                 rdl['acc'] = acc
         return rd
 

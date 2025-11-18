@@ -152,7 +152,7 @@ class BaseVLLMForEdit(ABC):
             if min_prompt_tok_n > len(prompt_tok):
                 min_prompt_tok_n = len(prompt_tok)
             mask[len(prompt_tok)-1:-1] += 1
-            label_masks.append(mask) 
+            label_masks.append(mask)
         input_embeds, vt_range = self.get_llm_input_embeds(input_strs, imgs)
         label_ids = pad_sequence(label_ids, True, tokenizer.pad_token_id).to(self.device[-1])[:, min_prompt_tok_n-1:]
         label_masks = pad_sequence(label_masks, True, 0).to(self.device[-1])[:, min_prompt_tok_n-1:]

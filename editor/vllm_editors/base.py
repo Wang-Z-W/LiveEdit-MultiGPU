@@ -266,18 +266,6 @@ class VLLMBaseEditorWithTraining(VLLMBaseEditor):
             ckpt_name = 'epoch-%d-i-%d-loss-%.4f'%(int(epoch), int(i), float(loss))
         ckpt_path = os.path.join(self.save_ckpt_dir, ckpt_name)
         torch.save(ckpt, ckpt_path)
-        
-    def save_ckpt_eval(self, eval_cfg, save_path):
-        train_modules = self.get_modules_for_training()
-        ckpt = {
-            'cfg': eval_cfg,
-            'i': None,
-            'epoch': None,
-            'loss': None,
-            'ema_loss': None,
-            'train_modules': {k:v.state_dict() for k, v in train_modules.items()},
-        }
-        torch.save(ckpt, save_path)
 
     def load_ckpt(self, ckpt_path, restrict = True, load_opt = True):
         '''Load checkpoint.'''
