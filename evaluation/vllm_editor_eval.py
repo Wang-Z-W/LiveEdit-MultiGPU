@@ -204,27 +204,39 @@ class VLLMEditorEvaluation():
         return rd
     
     def __get_results_after_edit_no_teacher_forcing__(self, vllm:BaseVLLMForEdit, ed, rd):
+        def normalize_target(prompt, target, space=False):
+            if len(target) == 0:
+                return target
+            needs_space = (prompt[-1] not in [' ', '\n']) if len(prompt) > 0 else True
+            if space:
+                if needs_space and target[0] not in [' ', '\n']:
+                    return ' ' + target
+            return target
         def get_eval_input_target(prompt, image, target):
-            (x, vt_range), _, m = vllm.prompts_imgs_target_to_xym([prompt], [image], ' ')
-            x['query_triple'] = (prompt, image, target)
-            x['query_range'] = (0, x['inputs_embeds'].shape[1] - m.shape[1] + 1)
-            y = vllm.processor.tokenizer([target], return_tensors='pt', padding=True).input_ids[:,1:].to(vllm.device[-1])
-            return (x, vt_range), y
+            llm_inpt, vt_range = vllm.get_llm_input_embeds([prompt], [image])
+            llm_inpt['query_triple'] = (prompt, image, target)
+            llm_inpt['query_range'] = (0, llm_inpt['inputs_embeds'].shape[1])
+            target_text = normalize_target(prompt, target)
+            tokenized = tokenizer([target_text], return_tensors='pt', padding=True).input_ids.to(vllm.device[-1])
+            if tokenized.shape[1] > 1:
+                label_ids = tokenized[:, 1:2]
+            else:
+                label_ids = torch.full((tokenized.shape[0], 1), pad_token_id, dtype=tokenized.dtype, device=vllm.device[-1])
+            return (llm_inpt, vt_range), label_ids
         def accuracy_and_prediction(input_embeds, vt_range, label_ids):
-            # label_ids/label_masks: [1, l2]
-            assert len(label_ids) == 1
-            logits = vllm.get_llm_outpt(input_embeds, vt_range).logits # [1,l1,d]
-            pre_y = torch.softmax(logits, -1).argmax(-1) # [1, l1]
-            pre_y = pre_y[:, -1:] # [1, l2]
-            acc = (pre_y == label_ids).sum() / label_ids.shape[1]
-            return float(acc), pre_y
+            assert label_ids.shape == (1, 1)
+            logits = vllm.get_llm_outpt(input_embeds, vt_range).logits
+            next_token = logits[:, -1:, :].argmax(-1)
+            acc = float((next_token == label_ids).float().mean())
+            return acc, next_token
         tokenizer = vllm.get_llm_tokenizer()
+        pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
         # reliability
         for rdr, edr in zip(rd['reliability'], ed['requests']):
             (input_embeds, vt_range), label_ids = get_eval_input_target(
                     edr['prompt'], edr['image'], edr['target_new'])
             acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
-            rdr['predict_after_edit'] = tokenizer.decode(pre_y[0])
+            rdr['predict_after_edit'] = tokenizer.batch_decode(pre_y)
             rdr['acc'] = acc
         # generality
         for gen_name in ed['generality']:
@@ -232,7 +244,7 @@ class VLLMEditorEvaluation():
                 (input_embeds, vt_range), label_ids = get_eval_input_target(
                     edg['prompt'], edg['image'], edg['target'])
                 acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
-                rdg['predict_after_edit'] = tokenizer.decode(pre_y[0])
+                rdg['predict_after_edit'] = tokenizer.batch_decode(pre_y)
                 rdg['acc'] = acc
         # locality
         for loc_name in ed['locality']:
@@ -240,7 +252,7 @@ class VLLMEditorEvaluation():
                 (input_embeds, vt_range), label_ids = get_eval_input_target(
                     edl['prompt'], edl['image'], edl['target'])
                 acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
-                rdl['predict_after_edit'] = tokenizer.decode(pre_y[0])
+                rdl['predict_after_edit'] = tokenizer.batch_decode(pre_y)
                 rdl['acc'] = acc
         return rd
 

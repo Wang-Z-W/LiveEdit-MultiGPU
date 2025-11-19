@@ -183,7 +183,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             moe_in_rs: [m, lora_rank, ffn_out]; moe_out_cs: [m, lora_rank, ffn_out]; 
             moe_out_rs: [m, lora_rank, ffn_in]; fuse_coe: [1, m]'''
         assert len(inpt_reps) == len(fuse_coe) == 1
-        x = self.instant_reps_norm(inpt_reps)[0].to('cpu') # [1, l, hidden_size] -> [l, hidden_size]
+        x = self.instant_reps_norm(inpt_reps)[0] # [1, l, hidden_size] -> [l, hidden_size]
         # x = torch.einsum('ld,mrd,mrD,m->lD', x, moe_cs, moe_rs, fuse_coe[0])
         x = torch.relu(torch.einsum('ld,mrd->lmr', x, moe_cs))
         x = torch.einsum('lmr,mrd,m->ld', x, moe_rs, fuse_coe[0])
@@ -240,17 +240,22 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             self.opt.load_state_dict(ckpt['opt'])
             if self.lr_scheduler != None and ckpt['lr_scheduler'] != None:
                 self.lr_scheduler.load_state_dict(ckpt['lr_scheduler'])
+        print('Load %s checkpoint from %s.'%(self.name_of_editor_and_model()[0], ckpt_path))
         if 'requests_pool' in ckpt.keys():
             self.requests_pool = ckpt['requests_pool']
+            print("Load %d requests from checkpoint."%len(self.requests_pool))
         if 'eqr_pool' in ckpt.keys():
             self.eqr_pool = ckpt['eqr_pool'].to(self.device[-1])
+            print("Load %d eqr in pool from checkpoint."%self.eqr_pool.shape[0])
         if 'evr_pool' in ckpt.keys():
             self.evr_pool = ckpt['evr_pool'].to(self.device[-1])
+            print("Load %d evr in pool from checkpoint."%self.evr_pool.shape[0])
         if 'moe_cs_pool' in ckpt.keys():
             self.moe_cs_pool = ckpt['moe_cs_pool'].to(self.device[-1])
+            print("Load %d moe_cs in pool from checkpoint."%self.moe_cs_pool.shape[0])
         if 'moe_rs_pool' in ckpt.keys():
             self.moe_rs_pool = ckpt['moe_rs_pool'].to(self.device[-1])
-        print('Load %s checkpoint from %s.'%(self.name_of_editor_and_model()[0], ckpt_path))
+            print("Load %d moe_rs in pool from checkpoint."%self.moe_rs_pool.shape[0])
         return ckpt['i'], ckpt['epoch'], ckpt['loss'], ckpt['ema_loss']
 
     def edit_one_piece(self, request: Dict) -> None:

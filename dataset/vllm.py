@@ -261,11 +261,13 @@ class CUBInferenceDataset:
         
         instruction = "Please answer with either water or land, and do not include any additional punctuation, numbers, or characters."
         
-        text1 = "Is the bird in the image a water bird? Please only answer yes or no."
-        text2 = "Is the bird in the image a land bird? Please only answer yes or no."
-        text3 = "What type of bird is in the image? Choose from: land, water."
-        text4 = f"Does the bird in the picture belong to a water bird or a land bird? {instruction}"
-        text5 = "Look at this bird image. Is this a water bird or a land bird? Please answer with 'water' or 'land'."
+        text = [
+            # "Is the bird in the image a water bird? Please only answer yes or no.",
+            # "Is the bird in the image a land bird? Please only answer yes or no.",
+            "What type of bird is in the image? Choose from: land, water.",
+            f"Does the bird in the picture belong to a water bird or a land bird? {instruction}",
+            "Look at this bird image. Is this a water bird or a land bird? Please answer with 'water' or 'land'."
+        ]
         
         # Load annotations
         anns = pd.read_csv(self.data_path)
@@ -276,7 +278,7 @@ class CUBInferenceDataset:
             img = Image.open(img_path).convert('RGB')
             bird_type = row['y']
             background = row['background']
-            data.append({'img_id': img_id, 'img_path': img_path, 'image': img, 'bird_type': bird_type, 'background': background, 'text': [text1, text2, text3, text4, text5]})
+            data.append({'img_id': img_id, 'img_path': img_path, 'image': img, 'bird_type': bird_type, 'background': background, 'text': text})
             
         self.data = data
         

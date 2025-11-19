@@ -3,6 +3,10 @@ from ..base import BaseVLLMForEdit, get_multiple_gpus_for_vllm
 from PIL.Image import Image as ImageClass
 from transformers import  AutoTokenizer
 import torch, inspect
+import types
+from functools import wraps
+from transformers.modeling_outputs import CausalLMOutputWithPast
+from torchvision.transforms import ToPILImage
 
 
 class LlavaForEdit(BaseVLLMForEdit):
@@ -25,6 +29,74 @@ class LlavaForEdit(BaseVLLMForEdit):
 
     def get_llm_tokenizer(self):
         return self.processor.tokenizer
+
+    def _wrap_full_model_forward(self):
+        model = self.model  # LlavaForConditionalGeneration
+        if getattr(model, "_full_forward_wrapped", False):
+            return
+        model._forward_orig = model.forward
+
+        @wraps(model._forward_orig)
+        def wrapped_forward(module_self, *args, **kwargs):
+            # 1. 调用原始 forward 前，先用 processor/generate 的逻辑把输入拆出来
+            text, images = self._extract_text_and_imgs(args, kwargs)
+            llm_inpt, vt_range = self.get_llm_input_embeds([text], [images])
+            # 2. 用包装过的 get_llm_outpt 完成中间层 hook + MoE
+            outputs = self.get_llm_outpt(llm_inpt, vt_range)
+            # 3. 组织返回对象，保持与原 forward 一致
+            logits = outputs.logits if hasattr(outputs, "logits") else outputs[0]
+            loss = None
+            if kwargs.get("labels") is not None:
+                loss = module_self.loss(logits, kwargs["labels"])
+            return CausalLMOutputWithPast(loss=loss, logits=logits, past_key_values=outputs.past_key_values)
+
+        model.forward = types.MethodType(wrapped_forward, model)
+        model._full_forward_wrapped = True
+
+    def _extract_text_and_imgs(self, args, kwargs):
+        """
+        从 `generate` 的输入中恢复 prompt 文本与图像，用于重新构造
+        `get_llm_input_embeds` 所需的数据。
+        """
+        forward_fn = getattr(self.model, "_forward_orig", self.model.forward)
+        sig = inspect.signature(forward_fn)
+        bound = sig.bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+
+        input_ids = bound.arguments.get("input_ids")
+        if input_ids is None:
+            raise ValueError("LLaVA forward without `input_ids` is not supported in generate flow.")
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0)
+        prompt = self.processor.tokenizer.batch_decode(
+            input_ids.detach().cpu(),
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        )[0]
+
+        pixel_values = bound.arguments.get("pixel_values")
+        image = None
+        if pixel_values is not None:
+            if isinstance(pixel_values, torch.Tensor):
+                px = pixel_values.detach().cpu()
+            else:
+                px = torch.as_tensor(pixel_values)
+            if px.dim() == 3:
+                px = px.unsqueeze(0)
+
+            image_processor = self.processor.image_processor
+            if hasattr(image_processor, "postprocess"):
+                image = image_processor.postprocess(px, output_type="pil")[0]
+            elif hasattr(image_processor, "post_process"):
+                image = image_processor.post_process(px, output_type="pil")[0]
+            else:
+                mean = torch.tensor(image_processor.image_mean).view(1, -1, 1, 1)
+                std = torch.tensor(image_processor.image_std).view(1, -1, 1, 1)
+                unnorm = (px * std + mean).clamp(0, 1)
+                image = ToPILImage()(unnorm[0])
+
+        return prompt, image
+
 
     def get_llm_input_embeds(self, texts:List[str], imgs:Optional[List[ImageClass]] = None):
         '''Only support one image in one text.'''
@@ -62,7 +134,7 @@ class LlavaForEdit(BaseVLLMForEdit):
             img_begin = torch.where(inpt['input_ids'][0] == self.get_img_special_token_id())[0][0]
             img_end = img_begin + self.get_img_token_n()
             vt_range = [int(img_begin), int(img_end)]
-        else: 
+        else:
             vt_range = None
         return llm_inpt, vt_range
 

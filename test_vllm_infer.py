@@ -26,6 +26,13 @@ def get_cfg():
 def infer(editor, text: str, image: Image.Image, max_length: int = 200) -> str:
     model = editor.vllm.model
     processor = editor.vllm.processor
+    
+    # llm_input_embeds, vt_range = editor.vllm.get_llm_input_embeds([text], [image])
+    # llm_output_logits = editor.vllm.get_llm_outpt(llm_input_embeds, vt_range).logits
+    # llm_output_ids = torch.softmax(llm_output_logits, -1).argmax(-1)
+    
+    # assistant_answer = processor.batch_decode(llm_output_ids, skip_special_tokens=True)[0].strip()
+    
     model.eval()
     with torch.no_grad():
         if isinstance(model, LlavaForConditionalGeneration):
@@ -75,6 +82,52 @@ def infer_dataset(cfg, editor, infer_data, infer_results_save_path: str):
     infer_results_df = pd.DataFrame(infer_results)
     infer_results_df.to_csv(infer_results_save_path, index=False)
     print(f"Save inference results to {infer_results_save_path}")
+
+def infer_dataset_single_forward(cfg, editor, infer_data, infer_results_save_path: str):
+    vllm = editor.vllm
+    def get_eval_input_target(prompt, image, target):
+            (x, vt_range), _, m = vllm.prompts_imgs_target_to_xym([prompt], [image], ' ')
+            x['query_triple'] = (prompt, image, target)
+            x['query_range'] = (0, x['inputs_embeds'].shape[1] - m.shape[1] + 1)
+            y = vllm.processor.tokenizer([target], return_tensors='pt', padding=True).input_ids[:,1:].to(vllm.device[-1])
+            return (x, vt_range), y
+    def accuracy_and_prediction(input_embeds, vt_range, label_ids):
+        # label_ids/label_masks: [1, l2]
+        assert len(label_ids) == 1
+        logits = vllm.get_llm_outpt(input_embeds, vt_range).logits # [1,l1,d]
+        pre_y = torch.softmax(logits, -1).argmax(-1) # [1, l1]
+        pre_y = pre_y[:, -1:] # [1, l2]
+        acc = (pre_y == label_ids).sum() / label_ids.shape[1]
+        return float(acc), pre_y
+    def infer_single(editor, prompt, image, target):
+        (input_embeds, vt_range), label_ids = get_eval_input_target(prompt, image, target)
+        acc, pre_y = accuracy_and_prediction(input_embeds, vt_range, label_ids)
+        pred = vllm.processor.tokenizer.decode(pre_y[0])
+        return acc, pre_y, pred
+    
+    infer_results = []
+    for ann in tqdm(infer_data.data, total=infer_data.__len__(), desc=f'{cfg.model_name} infering on {cfg.infer_data_name}'):
+        prompts = ann['text'] if isinstance(ann['text'], list) else [ann['text']]
+        image = ann['image']
+        target = ann['bird_type']
+        vllm_outs = {}
+        for p in prompts:
+            acc, pre_y, pred = infer_single(editor, p, image, target)
+            vllm_outs[p] = {
+                'acc': acc,
+                'pred_ids': pre_y,
+                'pred_text': pred,
+            }
+        infer_results.append({
+            'img_id': ann['img_id'],
+            'img_path': ann['img_path'],
+            'bird_type': ann['bird_type'],
+            'background': ann['background'],
+            'text': prompts,
+            'vllm_out': vllm_outs,
+        })
+        import pdb; pdb.set_trace()
+
     
 def infer_single(editor):
     image = Image.open('/data/wzw/LiveEdit/data/CUB_200_2011/CUB_200_2011/images/094.White_breasted_Nuthatch/White_Breasted_Nuthatch_0003_86029.jpg').convert('RGB')
@@ -106,6 +159,7 @@ if __name__ == "__main__":
     infer_results_save_path = os.path.join(proj_dir, f'infer_results_{cfg.model_name}_on_{cfg.infer_data_name}.csv')
     
     editor = load_vllm_editor(cfg.editor_name, cfg.model_name, cfg.device, None, cfg.editor_ckpt_path, False)
+    editor.vllm._wrap_full_model_forward()
     
     # Load inference data
     if cfg.infer_data_name == 'CUB_200_2011':
@@ -123,3 +177,5 @@ if __name__ == "__main__":
         
     # Inference
     infer_dataset(cfg, editor, infer_data, infer_results_save_path)
+
+    # infer_dataset_single_forward(cfg, editor, infer_data, infer_results_save_path)
