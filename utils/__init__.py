@@ -175,7 +175,7 @@ def load_vllm_editor(editor_name:str, edit_model_name:str, device:List[str],
     elif editor_name == 'lemoe_vl':
         from editor.vllm_editors.lemoe_vl.lemoe_vl import LEMoEvl, LEMoEvlConfig
         config = LEMoEvlConfig.from_yaml(config_path)
-        editor = LEMoEvl(vllm, config, device)
+        editor = LEMoEvl(vllm, config, device, verbose = True)
     elif editor_name == 'empty':
         from editor.vllm_editors.base import EmptyEditor
         editor = EmptyEditor(vllm, device)

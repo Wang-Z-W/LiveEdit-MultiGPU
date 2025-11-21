@@ -9,5 +9,5 @@ lora_rank: 32
 lora_edit_batch_size: 20
 max_steps: 100
 min_loss: 0.03
-lr: 1.e-4
+lr: 1.e-3
 topk: 1

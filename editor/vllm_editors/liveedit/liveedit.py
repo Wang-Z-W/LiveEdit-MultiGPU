@@ -216,7 +216,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
     def save_ckpt_eval(self, eval_cfg, save_path):
         train_modules = self.get_modules_for_training()
         ckpt = {
-            'cfg': eval_cfg,
+            'eval_cfg': eval_cfg,
             'i': None,
             'epoch': None,
             'loss': None,
@@ -229,10 +229,11 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             'moe_rs_pool': self.moe_rs_pool,
         }
         torch.save(ckpt, save_path)
+        print(f"LiveEdit editor checkpoint saved to {save_path}")
         
     def load_ckpt(self, ckpt_path, restrict = True, load_opt = True):
         '''Load checkpoint.'''
-        ckpt = torch.load(ckpt_path, 'cpu', weights_only=False)
+        ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
         train_modules = self.get_modules_for_training()
         for k in train_modules.keys():
             train_modules[k].load_state_dict(ckpt['train_modules'][k], restrict)
@@ -240,7 +241,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             self.opt.load_state_dict(ckpt['opt'])
             if self.lr_scheduler != None and ckpt['lr_scheduler'] != None:
                 self.lr_scheduler.load_state_dict(ckpt['lr_scheduler'])
-        print('Load %s checkpoint from %s.'%(self.name_of_editor_and_model()[0], ckpt_path))
+        print(f"LiveEdit editor checkpoint loaded from {ckpt_path}")
         if 'requests_pool' in ckpt.keys():
             self.requests_pool = ckpt['requests_pool']
             print("Load %d requests from checkpoint."%len(self.requests_pool))

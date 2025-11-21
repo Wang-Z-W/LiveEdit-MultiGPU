@@ -29,8 +29,8 @@ class LEMoEvlConfig(BaseConfig):
 
 class LEMoEvl(VLLMBaseEditor):
 
-    def __init__(self, vllm: BaseVLLMForEdit, config:LEMoEvlConfig, device='cuda:0',
-                 verbose = False):
+    def __init__(self, vllm: BaseVLLMForEdit, config:LEMoEvlConfig, device:List[str]=['cuda:0'],
+                 verbose:bool = False):
         super().__init__(vllm, device)
         self.cfg = config
         self.verbose = verbose
@@ -91,13 +91,13 @@ class LEMoEvl(VLLMBaseEditor):
     def restore_to_original_model(self):
         self.edited_requests = []
         self.now_requests_to_be_edit = []
-        self.lora_cs1 = torch.zeros([0, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device)
-        self.lora_rs1 = torch.zeros([0, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device)
-        self.lora_cs2 = torch.zeros([0, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device)
-        self.lora_rs2 = torch.zeros([0, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device)
-        self.lora_ks = torch.zeros([0, self.cfg.llm_hidden_dim1], device = self.device)
-        self.kws_down = torch.zeros([0, self.cfg.llm_hidden_dim1, self.cfg.llm_hidden_dim1//4], device = self.device)
-        self.kws_up = torch.zeros([0, self.cfg.llm_hidden_dim1//4, self.cfg.llm_hidden_dim1], device = self.device)
+        self.lora_cs1 = torch.zeros([0, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device[-1])
+        self.lora_rs1 = torch.zeros([0, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device[-1])
+        self.lora_cs2 = torch.zeros([0, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device[-1])
+        self.lora_rs2 = torch.zeros([0, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device[-1])
+        self.lora_ks = torch.zeros([0, self.cfg.llm_hidden_dim1], device = self.device[-1])
+        self.kws_down = torch.zeros([0, self.cfg.llm_hidden_dim1, self.cfg.llm_hidden_dim1//4], device = self.device[-1])
+        self.kws_up = torch.zeros([0, self.cfg.llm_hidden_dim1//4, self.cfg.llm_hidden_dim1], device = self.device[-1])
 
     def edit_one_piece(self, request: Dict) -> None:
         """request = {'image': PILImage, 'prompt': str, 'target_new': str, ...} """
@@ -112,13 +112,13 @@ class LEMoEvl(VLLMBaseEditor):
 
     def add_new_lora(self, requests:List[Dict]):
         self.is_editing = True
-        new_c1 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device)*0.01)
-        new_r1 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device)*0.01)
-        new_c2 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device)*0.01)
-        new_r2 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device)*0.01)
-        new_k = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1], device = self.device)*0.01)
-        new_kws_down = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1, self.cfg.llm_hidden_dim1//4], device = self.device)*0.01)
-        new_kws_up = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1//4, self.cfg.llm_hidden_dim1], device = self.device)*0.01)
+        new_c1 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device[-1])*0.01)
+        new_r1 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device[-1])*0.01)
+        new_c2 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim2, self.cfg.lora_rank], device = self.device[-1])*0.01)
+        new_r2 = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1, self.cfg.lora_rank], device = self.device[-1])*0.01)
+        new_k = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1], device = self.device[-1])*0.01)
+        new_kws_down = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1, self.cfg.llm_hidden_dim1//4], device = self.device[-1])*0.01)
+        new_kws_up = nn.Parameter(torch.randn([1, self.cfg.llm_hidden_dim1//4, self.cfg.llm_hidden_dim1], device = self.device[-1])*0.01)
         opt = Adam([new_c1, new_r1, new_c2, new_r2, new_kws_down, new_kws_up], lr = self.cfg.lr)
         o_lora_cs1, o_lora_rs1, o_lora_cs2, o_lora_rs2 = self.lora_cs1, self.lora_rs1, self.lora_cs2, self.lora_rs2
         o_lora_ks, o_kws_down, o_kws_up = self.lora_ks, self.kws_down, self.kws_up
@@ -154,3 +154,33 @@ class LEMoEvl(VLLMBaseEditor):
         self.kws_down.detach_().requires_grad_(False)
         self.kws_up.detach_().requires_grad_(False)
         self.is_editing = False
+
+    def save_ckpt_eval(self, eval_cfg, path):
+        ckpt = {
+            'eval_cfg': eval_cfg,
+            'editor_cfg': self.cfg,
+            'lora_rank': self.cfg.lora_rank,
+            'lora_n': self.lora_ks.shape[0],
+            'lora_cs1': self.lora_cs1.to('cpu'),
+            'lora_rs1': self.lora_rs1.to('cpu'),
+            'lora_cs2': self.lora_cs2.to('cpu'),
+            'lora_rs2': self.lora_rs2.to('cpu'),
+            'lora_ks': self.lora_ks.to('cpu'),
+            'kws_down': self.kws_down.to('cpu'),
+            'kws_up': self.kws_up
+        }
+        torch.save(ckpt, path)
+        print(f"LEMoEvl editor checkpoint saved to: {path}")
+
+    def load_ckpt(self, ckpt_path, restrict = True):
+        ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+        assert ckpt['lora_rank'] == self.cfg.lora_rank, "Lora rank mismatch."
+        self.lora_cs1 = ckpt['lora_cs1'].to(self.device[-1])
+        self.lora_rs1 = ckpt['lora_rs1'].to(self.device[-1])
+        self.lora_cs2 = ckpt['lora_cs2'].to(self.device[-1])
+        self.lora_rs2 = ckpt['lora_rs2'].to(self.device[-1])
+        self.lora_ks = ckpt['lora_ks'].to(self.device[-1])
+        self.kws_down = ckpt['kws_down'].to(self.device[-1])
+        self.kws_up = ckpt['kws_up'].to(self.device[-1])
+        self.is_editing  = False
+        print(f"LEMoEvl editor checkpoint loaded from: {ckpt_path}")

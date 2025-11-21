@@ -142,11 +142,10 @@ class VLLMEditorEvaluation():
             if cfg.save_editor_checkpoint:
                 checkpoint_save_path = os.path.join(save_dir, f"checkpoint_session_{cur_session}.pt")
                 editor.save_ckpt_eval(cfg, checkpoint_save_path)
-                print(f'Editor {cfg.editor_name} checkpoint saved to: {checkpoint_save_path}')
             # test
             for rd, ed in zip(tqdm(split_rd, 'Testing', leave = False), split_ed): # compute scores 
-                # rd = self.__get_results_after_edit__(editor.vllm, ed, rd)
-                rd = self.__get_results_after_edit_no_teacher_forcing__(editor.vllm, ed, rd)
+                rd = self.__get_results_after_edit__(editor.vllm, ed, rd)
+                # rd = self.__get_results_after_edit_no_teacher_forcing__(editor.vllm, ed, rd)
                 split_res.append(rd)
             editor.restore_to_original_model()
             results.append(split_res)

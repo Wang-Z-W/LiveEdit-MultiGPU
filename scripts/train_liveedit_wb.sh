@@ -10,5 +10,5 @@ nohup python -u train_vllm_editor.py \
     -bs 2 \
     -lkpt None \
     -tnp WaterBird \
-    -eps 50 \
-    -sci 2000 > OUT_train_llava_liveedit_wb_balanced_50eps_bs2.log 2>&1 &
+    -eps 100 \
+    -sci 500 > OUT_train_llava_liveedit_wb_balanced_50eps_bs2.log 2>&1 &

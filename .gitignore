@@ -8,8 +8,9 @@ venv/
 .venv/
 env/
 
-# 日志与中间输出
+# 日志、中间输出、脚本
 *.log
+scripts/
 
 # 训练/评估生成物（通常不入库）
 records/
