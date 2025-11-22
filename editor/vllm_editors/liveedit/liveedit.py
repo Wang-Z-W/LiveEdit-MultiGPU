@@ -183,7 +183,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             moe_in_rs: [m, lora_rank, ffn_out]; moe_out_cs: [m, lora_rank, ffn_out]; 
             moe_out_rs: [m, lora_rank, ffn_in]; fuse_coe: [1, m]'''
         assert len(inpt_reps) == len(fuse_coe) == 1
-        x = self.instant_reps_norm(inpt_reps)[0] # [1, l, hidden_size] -> [l, hidden_size]
+        x = self.instant_reps_norm(inpt_reps)[0].to('cpu') # [1, l, hidden_size] -> [l, hidden_size]
         # x = torch.einsum('ld,mrd,mrD,m->lD', x, moe_cs, moe_rs, fuse_coe[0])
         x = torch.relu(torch.einsum('ld,mrd->lmr', x, moe_cs))
         x = torch.einsum('lmr,mrd,m->ld', x, moe_rs, fuse_coe[0])
@@ -422,7 +422,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
             iqr = self.inpt_extractor.extract_query(query_reps) # [1, eqe_n, module_dim]
             fuse_coe = self.get_moe_fuse_coe(iqr, eqrs[mm]) # [1, selected_request_n]
             self.train_edit_residual = self.get_edit_residual(torch.cat(er, 1), 
-                moe_cs[mm], moe_rs[mm], fuse_coe)
+                moe_cs[mm].to('cpu'), moe_rs[mm].to('cpu'), fuse_coe.to('cpu')).to(er.device)
             logits = vllm.forward_from_mid_layer(input_embeds, vt_range, 
                 mr, self.cfg.llm_layer_tmp, self.cfg.edit_layer_i).logits
             rel_loss += vllm.label_loss(logits, label_ids, label_masks, True)
@@ -439,7 +439,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
                 iqr = self.inpt_extractor.extract_query(query_reps) # [1, eqe_n, module_dim]
                 fuse_coe = self.get_moe_fuse_coe(iqr, eqrs[mm]) # [1, selected_request_n]
                 self.train_edit_residual = self.get_edit_residual(torch.cat(er, 1), 
-                    moe_cs[mm], moe_rs[mm], fuse_coe)
+                    moe_cs[mm].to('cpu'), moe_rs[mm].to('cpu'), fuse_coe.to('cpu')).to(er.device)
                 logits = vllm.forward_from_mid_layer(input_embeds, vt_range, 
                     mr, self.cfg.llm_layer_tmp, self.cfg.edit_layer_i).logits
                 gen_name_loss += vllm.label_loss(logits, label_ids, label_masks, True)
@@ -458,7 +458,7 @@ class LiveEdit(VLLMBaseEditorWithTraining):
                 iqr = self.inpt_extractor.extract_query(query_reps) # [1, eqe_n, module_dim]
                 fuse_coe = self.get_moe_fuse_coe(iqr, eqrs[mm]) # [1, selected_request_n]
                 self.train_edit_residual = self.get_edit_residual(torch.cat(er, 1), 
-                    moe_cs[mm], moe_rs[mm], fuse_coe)
+                    moe_cs[mm].to('cpu'), moe_rs[mm].to('cpu'), fuse_coe.to('cpu')).to(er.device)
                 logits = vllm.forward_from_mid_layer(input_embeds, vt_range, 
                     mr, self.cfg.llm_layer_tmp, self.cfg.edit_layer_i).logits
                 loc_name_loss += vllm.logit_KL_loss(logits, pl, label_masks, True)

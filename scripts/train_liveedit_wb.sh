@@ -9,6 +9,6 @@ nohup python -u train_vllm_editor.py \
     -spt train \
     -bs 2 \
     -lkpt None \
-    -tnp WaterBird \
+    -tnp WaterBird-edit_annotations_truelabel_balanced-train \
     -eps 100 \
-    -sci 500 > OUT_train_llava_liveedit_wb_balanced_50eps_bs2.log 2>&1 &
+    -sci 500 > OUT_train_llava_liveedit_wb_balanced_train_100eps_bs2.log 2>&1 &
