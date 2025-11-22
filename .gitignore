@@ -22,7 +22,15 @@ data/SpuMNIST/spumnist_base/images_test/
 data/easy-edit-mm/images/
 data/VLKEB/mmkb_images/
 data/WaterBird/rephrase_images/
+data/WaterBird/rephrase_images_waterbird_land2water2_worstgroup_WW/
+data/WaterBird/rephrase_images_waterbird_land2water2_worstgroup_WL/
+data/WaterBird/rephrase_images_waterbird_land2water2_worstgroup_LW/
+data/WaterBird/rephrase_images_waterbird_land2water2_worstgroup_LL/
 data/WaterBird/waterbird_complete95_forest2water2_improved/
+data/WaterBird/waterbird_land2water2_worstgroup_WW/
+data/WaterBird/waterbird_land2water2_worstgroup_WL/
+data/WaterBird/waterbird_land2water2_worstgroup_LW/
+data/WaterBird/waterbird_land2water2_worstgroup_LL/
 data/CUB_200_2011/
 
 # 权重与检查点

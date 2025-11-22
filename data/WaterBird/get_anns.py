@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import pandas as pd
@@ -7,9 +8,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
+from dataset_utils import crop_and_resize, combine_and_mask
+
 
 root = Path("/data/wzw/LiveEdit-4.43.0")
-waterbird_root = root / "data" / "WaterBird" / "waterbird_complete95_forest2water2_improved"
 
 WATERBIRD_CLASSES = {
     0: "land",
@@ -46,6 +48,7 @@ PLACES = [
 
 PLACES365_PATH = "/data/wzw/group_DRO/Places365/data_large"
 
+
 def get_loc(data):
     id = random.choice(range(len(data['questions'])))
     return data['questions'][id], data['answers'][id]
@@ -56,78 +59,6 @@ def get_m_loc(data):
     m_loc_a = random.choice([a for a in m_loc['answer'] if a != ""])
     m_loc_img = m_loc['image']
     return m_loc_img, m_loc_q, m_loc_a
-
-def crop_and_resize(source_img, target_img):
-    """
-    Make source_img exactly the same as target_img by expanding/shrinking and
-    cropping appropriately.
-
-    If source_img's dimensions are strictly greater than or equal to the
-    corresponding target img dimensions, we crop left/right or top/bottom
-    depending on aspect ratio, then shrink down.
-
-    If any of source img's dimensions are smaller than target img's dimensions,
-    we expand the source img and then crop accordingly
-
-    Modified from
-    https://stackoverflow.com/questions/4744372/reducing-the-width-height-of-an-image-to-fit-a-given-aspect-ratio-how-python
-    """
-    source_width = source_img.size[0]
-    source_height = source_img.size[1]
-
-    target_width = target_img.size[0]
-    target_height = target_img.size[1]
-
-    # Check if source does not completely cover target
-    if (source_width < target_width) or (source_height < target_height):
-        # Try matching width
-        width_resize = (target_width, int((target_width / source_width) * source_height))
-        if (width_resize[0] >= target_width) and (width_resize[1] >= target_height):
-            source_resized = source_img.resize(width_resize, Image.Resampling.LANCZOS)
-        else:
-            height_resize = (int((target_height / source_height) * source_width), target_height)
-            assert (height_resize[0] >= target_width) and (height_resize[1] >= target_height)
-            source_resized = source_img.resize(height_resize, Image.Resampling.LANCZOS)
-        # Rerun the cropping
-        return crop_and_resize(source_resized, target_img)
-
-    source_aspect = source_width / source_height
-    target_aspect = target_width / target_height
-
-    if source_aspect > target_aspect:
-        # Crop left/right
-        new_source_width = int(target_aspect * source_height)
-        offset = (source_width - new_source_width) // 2
-        resize = (offset, 0, source_width - offset, source_height)
-    else:
-        # Crop top/bottom
-        new_source_height = int(source_width / target_aspect)
-        offset = (source_height - new_source_height) // 2
-        resize = (0, offset, source_width, source_height - offset)
-
-    source_resized = source_img.crop(resize).resize((target_width, target_height), Image.Resampling.LANCZOS)
-    return source_resized
-
-def combine_and_mask(img_new, mask, img_black):
-    """
-    Combine img_new, mask, and image_black based on the mask
-
-    img_new: new (unmasked image)
-    mask: binary mask of bird image
-    img_black: already-masked bird image (bird only)
-    """
-    # Warp new img to match black img
-    img_resized = crop_and_resize(img_new, img_black)
-    img_resized_np = np.asarray(img_resized)
-
-    # Mask new img
-    img_masked_np = np.around(img_resized_np * (1 - mask)).astype(np.uint8)
-
-    # Combine
-    img_combined_np = np.asarray(img_black) + img_masked_np
-    img_combined = Image.fromarray(img_combined_np)
-
-    return img_combined
 
 def replace_bg(image_path, place, output_subfolder):
     img_path = root / "data" / "CUB_200_2011" / "CUB_200_2011" / "images" / image_path
@@ -156,11 +87,21 @@ def replace_bg(image_path, place, output_subfolder):
     return image_path
 
 def main():
-    metadata = pd.read_csv(waterbird_root / "metadata.csv")
+    waterbird_file_name = sys.argv[1] if len(sys.argv) > 1 else None
+    if waterbird_file_name is None:
+        print("Please provide the WaterBird file name as an argument.")
+        sys.exit(1)
+    waterbird_root = (root / 'data' / 'WaterBird' / waterbird_file_name)
+    if os.path.exists(waterbird_root / 'metadata.csv'):
+        metadata = pd.read_csv(waterbird_root / "metadata.csv")
+        print(f"Loaded metadata from {waterbird_root / 'metadata.csv'}.")
+    else:
+        print(f"Metadata file not found at {waterbird_root / 'metadata.csv'}. Exiting.")
+        sys.exit(1)
     loc_train_data = json.load(open(root / "data" / "easy-edit-mm" / "locality" / "NQ dataset" / "train.json"))
     loc_val_data = json.load(open(root / "data" / "easy-edit-mm" / "locality" / "NQ dataset" / "validation.json"))
     m_loc_data = json.load(open(root / "data" / "easy-edit-mm" / "multimodal_locality" / "OK-VQA dataset" / "okvqa_loc.json"))
-    rephrase_img_dir = root / "data" / "WaterBird" / "rephrase_images"
+    rephrase_img_dir = root / "data" / "WaterBird" / f"rephrase_images_{waterbird_file_name}"
     
     anns = []
     INSTRUCT = "Choose from: land, water."
@@ -197,7 +138,7 @@ def main():
             "pred": pred,
             "alt": alt,
             "rephrase": rephrase,
-            "image_rephrase": os.path.join("rephrase_images", rephrase_image_path),
+            "image_rephrase": os.path.join(f"rephrase_images_{waterbird_file_name}", rephrase_image_path),
             "loc_q": loc_q,
             "loc_a": loc_a,
             "m_loc_img": m_loc_img,
@@ -205,7 +146,7 @@ def main():
             "m_loc_a": m_loc_a,
         })
         
-    with open(root / "data" / "WaterBird" / "edit_annotations.json", "w") as f:
+    with open(root / "data" / "WaterBird" / f"edit_annotations_{waterbird_file_name}_truelabel.json", "w") as f:
         json.dump(anns, f, indent=4)
 
 
